@@ -90,7 +90,10 @@ if __name__ == "__main__":
                         help="Load the entire segmentation to memory to speedup")
     args = parser.parse_args()
 
-    pred_seg = zarr.open(args.pred_seg, mode='r')
+    if args.pred_seg.endswith('.zarr'):
+        pred_seg = zarr.open(args.pred_seg, mode='r')
+    elif args.pred_seg.endswith('.npy'):
+        pred_seg = np.load(args.pred_seg)
     if args.load_to_memory:
         pred_seg = pred_seg[:]
     compute_metrics(pred_seg, args.skel_path)

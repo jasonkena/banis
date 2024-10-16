@@ -5,6 +5,10 @@ params:
     - 1e-2
   seed:
     - 0
+    - 1
+    - 2
+    - 3
+    - 4
   long_range:
     - 10
   batch_size:
@@ -28,7 +32,7 @@ params:
   affine:
     - 0.5
   n_steps:
-    - 5000
+    - 50000
   small_size:
     - 128
   data_setting:

@@ -1,10 +1,10 @@
 # BANIS: Baseline for Affinity-based Neuron Instance Segmentation
 
-**An easily adaptable baseline for the [Neuron Instance Segmentation Benchmark (NISB)](TODO), [predicting affinities](https://arxiv.org/abs/1706.00120) with [modern architectures](https://arxiv.org/abs/2303.09975) and simple connected components for post-processing**
+**An easily adaptable baseline for the [Neuron Instance Segmentation Benchmark (NISB)](https://s3.nexus.mpcdf.mpg.de/nisbw/nisb.html), [predicting affinities](https://arxiv.org/abs/1706.00120) with [modern architectures](https://arxiv.org/abs/2303.09975) and simple connected components for post-processing**
 
 ## Prerequisites
 
-[Download benchmark datasets](TODO) and set up a conda/mamba environment:
+[Download NISB datasets](https://s3.nexus.mpcdf.mpg.de/nisbw/nisb.html) and set up a conda/mamba environment:
 
 ```bash
 # With environment.yaml
@@ -15,7 +15,7 @@ mamba activate nisb
 mamba create -n nisb -c conda-forge python=3.11 -y
 mamba activate nisb 
 pip install torch torchvision torchaudio numpy connected-components-3d numba pytorch-lightning zarr monai scipy cython tensorboard
-pip install git+https://github.com/MIC-DKFZ/MedNeXt.git#egg=mednextv1
+pip install -e git+https://github.com/MIC-DKFZ/MedNeXt.git#egg=mednextv1
 pip install git+https://github.com/funkelab/funlib.evaluate.git 
 ```
 
@@ -26,9 +26,9 @@ Tested on a Slurm cluster with nodes equipped with 1 NVIDIA A40 GPU and 500 GB R
 Run a single training session (BANIS-S(mall)):
 
 ```bash
-python BANIS.py --seed 0 --batch_size 8 --n_steps 20000 --data_setting base --base_data_path /local/dataset/dir/ --save_path /local/logging/dir/
+python BANIS.py --seed 0 --batch_size 8 --n_steps 50000 --data_setting base --base_data_path /local/dataset/dir/ --save_path /local/logging/dir/
 ```
-Results are logged to TensorBoard. For GPUs with less than 48 GB memory, reduce `batch_size` (and adjust `n_steps` / `learning_rate`). For BANIS-L(arge) add `--model_id L --kernel_size 5`. Additional options are in `parse_args` of `affinity_prediction.py`.
+Results are logged to TensorBoard. For GPUs with less than 48 GB memory, reduce `batch_size` (and adjust `n_steps` / `learning_rate`). For BANIS-L(arge) add `--model_id L --kernel_size 5`. Additional options are in `parse_args` of `BANIS.py`.
 
 To run multiple jobs on Slurm, adjust `config.yaml` and `start_run.sh`, then:
 
@@ -38,10 +38,10 @@ python slurm_job_scheduler.py
 
 ## Evaluation
 
-To evaluate a predicted segmentation:
+To evaluate a predicted segmentation (`.zarr` or `.npy`):
 
 ```bash
-python metrics.py --pred_seg /path/to/predictions.zarr --skel_path /path/to/skeletons.pkl
+python metrics.py --pred_seg /path/to/predictions.zarr --skel_path /path/to/skeleton.pkl
 ```
 
 ## Visualization
@@ -49,7 +49,7 @@ python metrics.py --pred_seg /path/to/predictions.zarr --skel_path /path/to/skel
 To visualize the validation cube of each dataset, run:
 
 ```bash
- show_data.py --base_path /path/to/data/ 
+ show_data.py --base_path /local/benchmark/dir/ 
 ```
 
 

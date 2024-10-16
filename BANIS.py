@@ -110,6 +110,7 @@ class BANIS(LightningModule):
         print(f"device {next(self.parameters()).device}")
         self.cuda()
         # self.full_cube_inference("val")
+        assert self.best_nerl_so_far["val"] > 0, "No best NERL found in validation"
         self.full_cube_inference("test")
         self.full_cube_inference("train")
 
@@ -121,6 +122,7 @@ class BANIS(LightningModule):
             mode: Either "train", "val", or "test".
         """
         assert mode in ["train", "val", "test"], f"Invalid mode: {mode}"
+        print(f"Full cube inference for {mode}")
 
         base_path_mode = os.path.join(self.hparams.base_data_path, self.hparams.data_setting, mode)
         seeds_path_mode = sorted([f for f in os.listdir(base_path_mode) if "seed" in f])
@@ -284,13 +286,13 @@ def parse_args():
                         help="Path to save the model and logs.")
     parser.add_argument("--real_data_path", type=str,
                         default="/cajal/scratch/projects/misc/mdraw/data/funke/zebrafinch/training/",
-                        help="Path to the real dataset. see https://colab.research.google.com/github/funkelab/lsd/blob/master/lsd/tutorial/notebooks/lsd_data_download.ipynb ")
+                        help="Path to the real dataset. See https://colab.research.google.com/github/funkelab/lsd/blob/master/lsd/tutorial/notebooks/lsd_data_download.ipynb ")
     parser.add_argument("--affine_scale", type=float, default=0.2, help="Scale for affine augmentation.")
     parser.add_argument("--affine_shear", type=float, default=0.5, help="Shear for affine augmentation.")
     parser.add_argument("--shift_magnitude", type=int, default=10, help="Shift augmentation magnitude (voxels).")
     parser.add_argument("--mul_int", type=float, default=0.1, help="Multiplicative augmentation intensity.")
     parser.add_argument("--add_int", type=float, default=0.1, help="Additive augmentation intensity.")
-    parser.add_argument("--devices", type=int, default=1, help="Number GPU devices to use (-1: all).")
+    parser.add_argument("--devices", type=int, default=-1, help="Number GPU devices to use (-1: all).")
     parser.add_argument("--n_debug_steps", type=int, default=0, help="Number of debug steps.")
     parser.add_argument("--log_every_n_steps", type=int, default=100, help="Log every n steps.")
     parser.add_argument("--val_check_interval", type=int, default=5000, help="Validation check interval.")
