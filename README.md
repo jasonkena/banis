@@ -1,10 +1,10 @@
 # BANIS: Baseline for Affinity-based Neuron Instance Segmentation
 
-**An easily adaptable baseline for the [Neuron Instance Segmentation Benchmark (NISB)](https://s3.nexus.mpcdf.mpg.de/nisbw/nisb.html), [predicting affinities](https://arxiv.org/abs/1706.00120) with [modern architectures](https://arxiv.org/abs/2303.09975) and simple connected components for post-processing**
+**An easily adaptable baseline for the [Neuron Instance Segmentation Benchmark (NISB)](https://structuralneurobiologylab.github.io/nisb/), [predicting affinities](https://arxiv.org/abs/1706.00120) with [modern architectures](https://arxiv.org/abs/2303.09975) and simple connected components for post-processing**
 
 ## Prerequisites
 
-[Download NISB datasets](https://s3.nexus.mpcdf.mpg.de/nisbw/nisb.html) and set up a conda/mamba environment:
+[Download NISB datasets](https://structuralneurobiologylab.github.io/nisb/) and set up a conda/mamba environment:
 
 ```bash
 # With environment.yaml
@@ -41,7 +41,7 @@ python slurm_job_scheduler.py
 To evaluate a predicted segmentation (`.zarr` or `.npy`):
 
 ```bash
-python metrics.py --pred_seg /path/to/predictions.zarr --skel_path /path/to/skeleton.pkl
+python metrics.py --pred_seg /path/to/predictions.zarr --skel_path /path/to/skeleton.pkl [--load_to_memory]
 ```
 
 ## Visualization
