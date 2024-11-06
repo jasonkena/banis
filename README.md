@@ -15,7 +15,7 @@ mamba activate nisb
 mamba create -n nisb -c conda-forge python=3.11 -y
 mamba activate nisb 
 pip install torch torchvision torchaudio numpy connected-components-3d numba pytorch-lightning zarr monai scipy cython tensorboard
-pip install -e git+https://github.com/MIC-DKFZ/MedNeXt.git#egg=mednextv1
+pip install git+https://github.com/MIC-DKFZ/MedNeXt.git#egg=mednextv1
 pip install git+https://github.com/funkelab/funlib.evaluate.git 
 ```
 

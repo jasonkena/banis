@@ -120,5 +120,5 @@ dependencies:
       - werkzeug==3.0.4
       - yarl==1.14.0
       - zarr==2.18.3
-      - -e git+https://github.com/MIC-DKFZ/MedNeXt.git#egg=mednextv1
+      - git+https://github.com/MIC-DKFZ/MedNeXt.git#egg=mednextv1
       - git+https://github.com/funkelab/funlib.evaluate.git
