@@ -1,3 +1,4 @@
+import gc
 from typing import Union, List, Tuple
 
 import numba
@@ -28,7 +29,7 @@ def compute_connected_component_segmentation(hard_aff: np.ndarray) -> np.ndarray
     Returns:
         The segmentation. Shape: (x, y, z).
     """
-    visited = np.zeros(tuple(hard_aff.shape[1:]), dtype=numba.boolean)
+    visited = np.zeros(tuple(hard_aff.shape[1:]), dtype=np.uint8)
     seg = np.zeros(tuple(hard_aff.shape[1:]), dtype=np.uint32)
     cur_id = 1
     for i in range(visited.shape[0]):

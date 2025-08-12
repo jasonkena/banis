@@ -9,6 +9,7 @@ import numpy as np
 import torch.utils
 import zarr
 from monai.transforms import RandAffined
+from monai.utils import set_determinism
 from torch.utils.data import Dataset, ConcatDataset
 from tqdm import tqdm
 
@@ -110,6 +111,7 @@ class AffinityDataset(Dataset):
             ),
             divide: Union[int, float] = 1,
     ):
+        set_determinism(seed=np.random.randint(0, 2**32))
         self.size_divisor = size_divisor
         self.img = img
         self.divide = divide
@@ -121,7 +123,7 @@ class AffinityDataset(Dataset):
 
         self.offset = tuple((img.shape[i] - seg.shape[i]) // 2 for i in range(3))
 
-        print(f"seg shape {seg.shape}, img shape {img.shape}")
+        # print(f"seg shape {seg.shape}, img shape {img.shape}")
 
         if img.shape[:3] != seg.shape:
             # Shapes don't match, pad seg (and load it into memory)
@@ -307,6 +309,7 @@ def get_seg_dataset(
         data_path: str,
         len_multiplier: int = 10,
         small_size: int = 128,
+        augment = False,
         augment_args: Namespace = Namespace(
             drop_slice_prob=0,
             shift_slice_prob=0,
@@ -341,7 +344,7 @@ def get_seg_dataset(
             seg=seg.astype(np.int64),
             img=(img / 255).astype(np.float16),
             # divide = 255
-            augment=True,
+            augment=augment,
             len_multiplier=len_multiplier,
             augment_args=augment_args,
             long_range=augment_args.long_range,
@@ -369,6 +372,7 @@ def get_train_data(args: argparse.Namespace):
             args.real_data_path,
             small_size=args.small_size,
             len_multiplier=100,
+            augment=args.augment,
             augment_args=args,
         )
     if args.synthetic > 0:
@@ -410,7 +414,7 @@ def get_syn_train_data(args: argparse.Namespace):
             seg=img_seg["seg"],
             img=img_seg["img"],
             long_range=args.long_range,
-            augment=True,
+            augment=args.augment,
             augment_args=args,
             divide=255.0,
             small_size=args.small_size,
