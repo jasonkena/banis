@@ -13,7 +13,7 @@ from nnunet_mednext import create_mednext_v1
 from pytorch_lightning import LightningModule, seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint, DeviceStatsMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
-from torch.nn.functional import binary_cross_entropy_with_logits
+from torch.nn.functional import binary_cross_entropy_with_logits, mse_loss, tanh
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -35,7 +35,7 @@ class BANIS(LightningModule):
 
         self.model = create_mednext_v1(
             num_input_channels=self.hparams.num_input_channels,
-            num_classes=6,  # 3 short + 3 long range affinities
+            num_classes=6 + int(self.hparams.sdt),  # 3 short + 3 long range affinities + (1 if self.hparams.sdt)
             model_id=self.hparams.model_id,
             kernel_size=self.hparams.kernel_size,
         )
@@ -74,10 +74,27 @@ class BANIS(LightningModule):
 
     def _step(self, data: Dict[str, torch.Tensor], mode: str) -> torch.Tensor:
         pred = self(data["img"])
+        if self.hparams.sdt:
+            aff_pred, sdt_pred = pred[:, :-1], pred[:, -1]
+        else:
+            aff_pred = pred
         target = data["aff"].half()
-        loss_mask = data["aff"] >= 0
-        loss = binary_cross_entropy_with_logits(pred[loss_mask], target[loss_mask])
-        self.log(f"{mode}_loss", loss)
+        aff_loss_mask = data["aff"] >= 0
+        aff_loss = binary_cross_entropy_with_logits(aff_pred[aff_loss_mask], target[aff_loss_mask])
+        self.log(f"{mode}_aff_loss", aff_loss)
+
+        if self.hparams.sdt:
+            sdt_target = data["sdt"].half()
+            assert -1 <= sdt_target.min() and sdt_target.max() <= 1
+            sdt_loss_mask = data["sdt_mask"]
+            sdt_loss = mse_loss(tanh(sdt_pred[sdt_loss_mask]), sdt_target[sdt_loss_mask])
+            self.log(f"{mode}_sdt_loss", sdt_loss)
+            loss = aff_loss + self.hparams.sdt_loss_weight * sdt_loss
+            self.log(f"{mode}_total_loss", loss)
+        else:
+            loss = aff_loss
+
+
         if not self.plotted:
             self._log_images(data, pred, mode)
             self.plotted = True
@@ -88,8 +105,12 @@ class BANIS(LightningModule):
         self._add_image(f"{mode}_img", data["img"][:, :3, middle])
         self._add_image(f"{mode}_aff", data["aff"][:, :3, middle])
         self._add_image(f"{mode}_aff_pred", scale_sigmoid(pred[:, :3, middle]))
-        self._add_image(f"{mode}_lr_aff", data["aff"][:, 3:, middle])
+        self._add_image(f"{mode}_lr_aff", data["aff"][:, 3:6, middle])
         self._add_image(f"{mode}_lr_aff_pred", scale_sigmoid(pred[:, 3:6, middle]))
+        
+        if self.hparams.sdt:
+            self._add_image(f"{mode}_sdt", data["sdt"][:, middle].unsqueeze(1))
+            self._add_image(f"{mode}_sdt_pred", tanh(pred[:, -1, middle]).unsqueeze(1))
 
         seg_middle = data["seg"][:, middle]
         colormap = torch.rand(seg_middle.max() + 1, 3)
@@ -190,18 +211,24 @@ class BANIS(LightningModule):
 
 def main():
     args = parse_args()
+    args.resolution = (9, 9, 20) if args.data_setting != "liconn" else (9, 9, 12)
+
     seed_everything(args.seed, workers=True)
 
     torch.set_float32_matmul_precision("medium")
 
-    exp_name = (
-            datetime.now().strftime("%y-%m-%d_%H-%M-%S-%f")
-            + f"ds_{args.data_setting}"
-              f"_lrng{args.long_range}_s{args.seed}_b{args.batch_size}_m{args.model_id}_k{args.kernel_size}_"
-              f"lr{args.learning_rate}_wd{args.weight_decay}_sch{args.scheduler}_syn_{args.synthetic}"
-              f"_drop{args.drop_slice_prob}_shift{args.shift_slice_prob}_int{args.intensity_aug}_noise{args.noise_scale}"
-              f"_affine{args.affine}_ns{args.n_steps}_ss{args.small_size}"
-    )
+    if args.checkpoint is not None:
+        exp_name = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(args.checkpoint)))))
+    else:
+        exp_name = (
+                datetime.now().strftime("%y-%m-%d_%H-%M-%S-%f")
+                + f"ds_{args.data_setting}"
+                  f"_lrng{args.long_range}_s{args.seed}_b{args.batch_size}_m{args.model_id}_k{args.kernel_size}_"
+                  f"lr{args.learning_rate}_wd{args.weight_decay}_sch{args.scheduler}_syn_{args.synthetic}"
+                  f"_drop{args.drop_slice_prob}_shift{args.shift_slice_prob}_int{args.intensity_aug}_noise{args.noise_scale}"
+                  f"_affine{args.affine}_ns{args.n_steps}_ss{args.small_size}"
+                  f"_sdt{int(args.sdt)}_sdtw{args.sdt_loss_weight}"
+        )
 
     save_dir = os.path.join(args.save_path, exp_name)
     os.makedirs(save_dir, exist_ok=True)
@@ -297,6 +324,12 @@ def parse_args():
     parser.add_argument("--log_every_n_steps", type=int, default=100, help="Log every n steps.")
     parser.add_argument("--val_check_interval", type=int, default=5000, help="Validation check interval.")
     parser.add_argument("--small_size", type=int, default=128, help="Size of the patches.")
+
+    # make it so that adding it makes it true
+    parser.add_argument("--sdt", action="store_true", help="Whether to train to predict SDT.")
+    parser.add_argument("--sdt_loss_weight", type=float, default=1.0, help="Weight of the SDT loss.")
+
+    parser.add_argument("--checkpoint", type=str, default=None,)
 
     return parser.parse_args()
 

@@ -11,6 +11,7 @@ import zarr
 from monai.transforms import RandAffined
 from torch.utils.data import Dataset, ConcatDataset
 from tqdm import tqdm
+from connectomics.data.utils.data_transform import skeleton_aware_distance_transform
 
 
 def comp_affinities(
@@ -109,6 +110,10 @@ class AffinityDataset(Dataset):
                 add_int=0.1,
             ),
             divide: Union[int, float] = 1,
+            sdt_args: Namespace = Namespace(
+                sdt=False,
+                resolution=(1.0, 1.0, 1.0),
+            ),
     ):
         self.size_divisor = size_divisor
         self.img = img
@@ -118,6 +123,7 @@ class AffinityDataset(Dataset):
         self.augment = augment
         self.len_multiplier = len_multiplier
         self.augment_args = augment_args
+        self.sdt_args = sdt_args
 
         self.offset = tuple((img.shape[i] - seg.shape[i]) // 2 for i in range(3))
 
@@ -168,11 +174,20 @@ class AffinityDataset(Dataset):
 
         labeled_mask = seg != -1
         aff, loss_mask = comp_affinities(seg, labeled_mask=labeled_mask, long_range=self.long_range)
+        if self.sdt_args.sdt:
+            sdt, _ = skeleton_aware_distance_transform(
+                seg,
+                resolution=self.sdt_args.resolution,
+            )
+            assert sdt.shape == seg.shape
 
         aff = aff[:, : self.size, : self.size, : self.size]
         loss_mask = loss_mask[:, : self.size, : self.size, : self.size]
         img = img[:, : self.size, : self.size, : self.size]
         seg = seg[: self.size, : self.size, : self.size]
+        labeled_mask = labeled_mask[: self.size, : self.size, : self.size]
+        if self.sdt_args.sdt:
+            sdt = sdt[: self.size, : self.size, : self.size]
         assert loss_mask.mean() > 0.1
 
         aff = aff.astype(np.int8)
@@ -184,6 +199,9 @@ class AffinityDataset(Dataset):
             "seg": seg,
             "aff": aff,
         }
+        if self.sdt_args.sdt:
+            data["sdt"] = sdt.astype(np.float16)
+            data["sdt_mask"] = labeled_mask.astype(np.bool_)
 
         for k, v in data.items():
             # To avoid issues with negative strides (e.g. from flipping)
@@ -315,7 +333,10 @@ def get_seg_dataset(
             affine=0.0,
             erode=False,
             long_range=10,
-        )
+        ),
+        sdt_args: Namespace = Namespace(
+            resolution=(1.0, 1.0, 1.0),
+        ),
 ) -> ConcatDataset:
     """
     Create a dataset from segmentation data.
@@ -346,6 +367,7 @@ def get_seg_dataset(
             augment_args=augment_args,
             long_range=augment_args.long_range,
             small_size=small_size,
+            sdt_args=sdt_args,
         )
         assert len(dataset) > 0
         datasets.append(dataset)
@@ -370,6 +392,7 @@ def get_train_data(args: argparse.Namespace):
             small_size=args.small_size,
             len_multiplier=100,
             augment_args=args,
+            sdt_args=args,
         )
     if args.synthetic > 0:
         syn_train_data = get_syn_train_data(args)
@@ -414,6 +437,7 @@ def get_syn_train_data(args: argparse.Namespace):
             augment_args=args,
             divide=255.0,
             small_size=args.small_size,
+            sdt_args=args,
         )
         for img_seg in img_segs_train
     ]
@@ -438,4 +462,5 @@ def get_val_data(args: argparse.Namespace):
         augment_args=args,
         divide=255.0,
         small_size=args.small_size,
+        sdt_args=args,
     )

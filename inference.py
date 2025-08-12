@@ -3,6 +3,7 @@ from typing import Union, List, Tuple
 import numba
 import numpy as np
 import torch
+from torch.nn.functional import tanh
 import torch.utils
 import zarr
 from numba import jit
@@ -90,6 +91,11 @@ def patched_inference(
     Returns:
         The full prediction. Shape: (channel, x, y, z).
     """
+    assert 3 <= prediction_channels <= 7
+    calculate_sdt = prediction_channels == 7
+    if calculate_sdt:
+        assert model.hparams.sdt
+
     print(
         f"Performing patched inference with do_overlap={do_overlap} for img of shape {img.shape} and dtype {img.dtype}")
     img = img[:]  # load into memory (expensive!)
@@ -108,7 +114,14 @@ def patched_inference(
         img_patch = torch.tensor(
             np.moveaxis(img[x: x + small_size, y: y + small_size, z: z + small_size], -1, 0)[None]).half().to(
             device) / divide
-        pred = scale_sigmoid(model(img_patch))[0, :prediction_channels]
+        if calculate_sdt:
+            # use tanh for last channel
+            pred = model(img_patch)[0]
+            pred = torch.cat(
+                [scale_sigmoid(pred[:prediction_channels - 1]), tanh(pred[prediction_channels - 1:])], dim=0
+            )
+        else:
+            pred = scale_sigmoid(model(img_patch))[0, :prediction_channels]
 
         weight_sum[:, x: x + small_size, y: y + small_size,
         z: z + small_size] += single_pred_weight if do_overlap else 1
