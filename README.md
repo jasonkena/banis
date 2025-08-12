@@ -30,11 +30,13 @@ python BANIS.py --seed 0 --batch_size 8 --n_steps 50000 --data_setting base --ba
 ```
 Results are logged to TensorBoard. For GPUs with less than 48 GB memory, reduce `batch_size` (and adjust `n_steps` / `learning_rate`). For BANIS-L(arge) add `--model_id L --kernel_size 5`. Additional options are in `parse_args` of `BANIS.py`.
 
-To run multiple jobs on Slurm, adjust `config.yaml` and `start_run.sh`, then:
+To run multiple jobs on Slurm, adjust `config.yaml` and `aff_train.sh`, then:
 
 ```bash
 python slurm_job_scheduler.py
 ```
+
+Adding an `auto_resubmit` argument to `config.yaml` allows Slurm to automatically resubmit jobs that reach the Slurm time limit (see `aff_train.sh`).
 
 ## Evaluation
 
