@@ -31,6 +31,10 @@ class BANIS(LightningModule):
     def __init__(self, *args: Any, **kwargs: Any):
         super().__init__()
         self.save_hyperparameters(*args, **kwargs)
+        # self.save_hyperparameters({
+        #     "args": args,
+        #     **kwargs,
+        # })
         print(f"hparams: \n{self.hparams}")
 
         self.model = create_mednext_v1(
@@ -46,6 +50,8 @@ class BANIS(LightningModule):
 
         self.best_nerl_so_far = defaultdict(float)  # for train/val/test
         self.best_thr_so_far = defaultdict(float)
+
+        self.plotted = False
 
     def on_fit_start(self):
         self.logger.experiment.add_text("hparams", str(self.hparams))
@@ -123,20 +129,21 @@ class BANIS(LightningModule):
                                          global_step=self.global_step)
 
     def on_validation_epoch_end(self):
-        self.full_cube_inference("val")
+        print("skipping validation inference")
+        # self.full_cube_inference("val")
 
     def on_train_end(self):
-        assert self.best_nerl_so_far["val"] > 0, "No best NERL found in validation"
+        # assert self.best_nerl_so_far["val"] > 0, "No best NERL found in validation"
         self.eval()
         print(f"device {next(self.parameters()).device}")
         self.cuda()
-        # self.full_cube_inference("val")
+        self.full_cube_inference("val")
         assert self.best_nerl_so_far["val"] > 0, "No best NERL found in validation"
         self.full_cube_inference("test")
         self.full_cube_inference("train")
 
     @torch.no_grad()
-    def full_cube_inference(self, mode: str):
+    def full_cube_inference(self, mode: str, evaluate_thresholds: bool = True, all_seeds: bool = False):
         """Perform full cube inference. Expensive!
 
         Args:
@@ -148,17 +155,21 @@ class BANIS(LightningModule):
         base_path_mode = os.path.join(self.hparams.base_data_path, self.hparams.data_setting, mode)
         seeds_path_mode = sorted([f for f in os.listdir(base_path_mode) if "seed" in f])
         assert len(seeds_path_mode) >= 1, f"No seeds found in {base_path_mode}"
-        seed_path = os.path.join(base_path_mode, seeds_path_mode[0])
+        if not all_seeds:
+            seeds_path_mode = seeds_path_mode[:1]
+        for x in seeds_path_mode:
+            seed_path = os.path.join(base_path_mode, x)
 
-        img_data = zarr.open(os.path.join(seed_path, "data.zarr"), mode="r")["img"]
+            img_data = zarr.open(os.path.join(seed_path, "data.zarr"), mode="r")["img"]
 
-        aff_pred = patched_inference(img_data, model=self, do_overlap=True, prediction_channels=3, divide=255,
-                                     small_size=self.hparams.small_size)
+            aff_pred = patched_inference(img_data, model=self, do_overlap=True, prediction_channels=3, divide=255,
+                                         small_size=self.hparams.small_size)
 
-        aff_pred = zarr.array(aff_pred, dtype=np.float16, store=f"{self.hparams.save_dir}/pred_aff_{mode}.zarr",
-                              chunks=(3, 512, 512, 512), overwrite=True)
+            aff_pred = zarr.array(aff_pred, dtype=np.float16, store=f"{self.hparams.save_dir}/pred_aff_{mode}_{x}.zarr",
+                                  chunks=(3, 512, 512, 512), overwrite=True)
 
-        self._evaluate_thresholds(aff_pred, os.path.join(seed_path, "skeleton.pkl"), mode)
+            if evaluate_thresholds:
+                self._evaluate_thresholds(aff_pred, os.path.join(seed_path, "skeleton.pkl"), mode)
 
     def _evaluate_thresholds(self, aff_pred: zarr.Array, skel_path: str, mode: str):
         best_voi = best_voi_no_merge = 1e100
@@ -270,7 +281,8 @@ def main():
         model=model,
         train_dataloaders=DataLoader(train_data, batch_size=args.batch_size, num_workers=args.workers, shuffle=True,
                                      drop_last=True),
-        val_dataloaders=DataLoader(val_data, batch_size=args.batch_size, num_workers=args.workers)
+        val_dataloaders=DataLoader(val_data, batch_size=args.batch_size, num_workers=args.workers),
+        ckpt_path=args.checkpoint if args.checkpoint else None,
     )
 
     print("Training complete")
