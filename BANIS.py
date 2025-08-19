@@ -105,9 +105,9 @@ class BANIS(LightningModule):
             sdt_loss = mse_loss(tanh(sdt_pred[sdt_loss_mask]), sdt_target[sdt_loss_mask])
             self.log(f"{mode}_sdt_loss", sdt_loss)
             loss = aff_loss + self.hparams.sdt_loss_weight * sdt_loss
-            self.log(f"{mode}_total_loss", loss)
         else:
             loss = aff_loss
+        self.log(f"{mode}_loss", loss)
 
 
         if not self.plotted:
@@ -128,8 +128,10 @@ class BANIS(LightningModule):
             self._add_image(f"{mode}_sdt_pred", tanh(pred[:, -1, middle]).unsqueeze(1))
 
         seg_middle = data["seg"][:, middle]
-        colormap = torch.rand(seg_middle.max() + 1, 3)
+        # max(1, ...)+2 so that empty all nonlabelled segments are colored black
+        colormap = torch.rand(max(1,seg_middle.max()) + 2, 3)
         colormap[0] = 0
+        colormap[-1] = 0
         colored_seg = colormap[seg_middle.cpu()].permute(0, 3, 1, 2)
         self._add_image(f"{mode}_seg", colored_seg)
 
@@ -158,7 +160,8 @@ class BANIS(LightningModule):
                 print(f"running validation: {command}")
 
         else:
-            self.full_cube_inference("val")
+            # self.full_cube_inference("val")
+            print("skipping full cube inference")
 
     def on_train_end(self):
         # assert self.best_nerl_so_far["val"] > 0, "No best NERL found in validation"
@@ -171,7 +174,7 @@ class BANIS(LightningModule):
         self.full_cube_inference("train")
 
     @torch.no_grad()
-    def full_cube_inference(self, mode: str, evaluate_thresholds: bool = True, all_seeds: bool = False, global_step=None):
+    def full_cube_inference(self, mode: str, evaluate_thresholds: bool = True, all_seeds: bool = False, prediction_channels = 3, global_step=None):
         """Perform full cube inference. Expensive!
 
         Args:
@@ -190,7 +193,7 @@ class BANIS(LightningModule):
 
             img_data = zarr.open(os.path.join(seed_path, "data.zarr"), mode="r")["img"]
 
-            aff_pred = patched_inference(img_data, model=self, do_overlap=True, prediction_channels=3, divide=255,
+            aff_pred = patched_inference(img_data, model=self, do_overlap=True, prediction_channels=prediction_channels, divide=255,
                                          small_size=self.hparams.small_size)
 
             aff_pred = zarr.array(aff_pred, dtype=np.float16, store=f"{self.hparams.save_dir}/pred_aff_{mode}_{x}.zarr",
@@ -359,7 +362,7 @@ def main():
         default_root_dir=save_dir,
         val_check_interval=args.val_check_interval,  # validation full cube inference expensive so less frequent
         check_val_every_n_epoch=None,
-        num_sanity_val_steps=args.n_debug_steps,
+        fast_dev_run=args.n_debug_steps,
         gradient_clip_val=1.0,
     )
     print(f"Checkpoints will be saved in: {trainer.default_root_dir}/checkpoints")
@@ -408,7 +411,7 @@ def parse_args():
     parser.add_argument("--val_check_interval", type=int, default=5000, help="Validation check interval.")
     parser.add_argument("--resume_from_last_checkpoint", action=argparse.BooleanOptionalAction, default=False, help="Resume training from the last checkpoint.")
     parser.add_argument("--model_from_checkpoint", type=str, default="", help="Load model from defined checkpoint.")
-    parser.add_argument("--validate_extern", action=argparse.BooleanOptionalAction, default=True, help="Long training with a separate validation process.")
+    parser.add_argument("--validate_extern", action=argparse.BooleanOptionalAction, default=False, help="Long training with a separate validation process.")
     parser.add_argument("--distributed", action=argparse.BooleanOptionalAction, default=False, help="Use distributed training.")
 
     # Data arguments

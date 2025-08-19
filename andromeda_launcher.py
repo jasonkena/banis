@@ -25,8 +25,8 @@ def create_slurm_script(just_command):
 cd {os.getcwd()}
 
 # Run the just command
-just {just_command}
-discord {just_command} finished
+srun just {just_command}
+discord {just_command} finished on $SLURM_JOB_ID
 """
     return slurm_script
 
