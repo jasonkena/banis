@@ -175,7 +175,7 @@ class BANIS(LightningModule):
         self.full_cube_inference("train")
 
     @torch.no_grad()
-    def full_cube_inference(self, mode: str, evaluate_thresholds: bool = True, all_seeds: bool = False, global_step=None):
+    def full_cube_inference(self, mode: str, evaluate_thresholds: bool = True, all_seeds: bool = False, prediction_channels = 3, global_step=None):
         """Perform full cube inference. Expensive!
 
         Args:
@@ -194,7 +194,7 @@ class BANIS(LightningModule):
 
             img_data = zarr.open(os.path.join(seed_path, "data.zarr"), mode="r")["img"]
 
-            aff_pred = patched_inference(img_data, model=self, do_overlap=True, prediction_channels=3, divide=255,
+            aff_pred = patched_inference(img_data, model=self, do_overlap=True, prediction_channels=prediction_channels, divide=255,
                                          small_size=self.hparams.small_size)
 
             aff_pred = zarr.array(aff_pred, dtype=np.float16, store=f"{self.hparams.save_dir}/pred_aff_{mode}_{x}.zarr",
