@@ -11,7 +11,7 @@ def create_slurm_script(just_command):
     job_name = f"just_{just_command.replace(' ', '_')}"
     
     slurm_script = f"""#!/bin/bash
-#SBATCH --job-name={job_name}
+#SBATCH --job-name=mito_{job_name}
 #SBATCH --partition=long
 #SBATCH --time=120:00:00
 #SBATCH --cpus-per-task=32
@@ -26,7 +26,7 @@ cd {os.getcwd()}
 
 # Run the just command
 just {just_command}
-discord {just_command} finished
+discord {just_command} finished on $SLURM_JOB_ID
 """
     return slurm_script
 

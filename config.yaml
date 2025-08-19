@@ -62,3 +62,18 @@ params:
     - False
   validate_extern:
     - True
+mito:
+  data_path: ./mito_data
+  settings:
+    - name: betaSeg
+      resolution: [16, 16, 16]
+      path: /projects/weilab/dataset/MitoLE/betaSeg
+      train: ["high_c3", "low_c1", "low_c2"]
+      test: ["high_c2", "high_c4", "low_c3"]
+      val: ["high_c1"]
+    - name: han24
+      resolution: [30, 8, 8]
+      path: /projects/weilab/dataset/MitoLE/han24
+      train: ["neg0", "pos0"]
+      test: ["neg1", "pos1"]
+      val: ["pos2"]

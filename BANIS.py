@@ -21,6 +21,7 @@ from pytorch_lightning.strategies import DDPStrategy
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from nicety.conf import get_conf
 
 from data import load_data
 from inference import scale_sigmoid, patched_inference, compute_connected_component_segmentation
@@ -105,9 +106,9 @@ class BANIS(LightningModule):
             sdt_loss = mse_loss(tanh(sdt_pred[sdt_loss_mask]), sdt_target[sdt_loss_mask])
             self.log(f"{mode}_sdt_loss", sdt_loss)
             loss = aff_loss + self.hparams.sdt_loss_weight * sdt_loss
-            self.log(f"{mode}_total_loss", loss)
         else:
             loss = aff_loss
+        self.log(f"{mode}_loss", loss)
 
 
         if not self.plotted:
@@ -128,8 +129,10 @@ class BANIS(LightningModule):
             self._add_image(f"{mode}_sdt_pred", tanh(pred[:, -1, middle]).unsqueeze(1))
 
         seg_middle = data["seg"][:, middle]
-        colormap = torch.rand(seg_middle.max() + 1, 3)
+        # max(1, ...)+2 so that empty all nonlabelled segments are colored black
+        colormap = torch.rand(max(1,seg_middle.max()) + 2, 3)
         colormap[0] = 0
+        colormap[-1] = 0
         colored_seg = colormap[seg_middle.cpu()].permute(0, 3, 1, 2)
         self._add_image(f"{mode}_seg", colored_seg)
 
@@ -158,7 +161,8 @@ class BANIS(LightningModule):
                 print(f"running validation: {command}")
 
         else:
-            self.full_cube_inference("val")
+            # self.full_cube_inference("val")
+            print("skipping full cube inference")
 
     def on_train_end(self):
         # assert self.best_nerl_so_far["val"] > 0, "No best NERL found in validation"
@@ -181,7 +185,7 @@ class BANIS(LightningModule):
         print(f"Full cube inference for {mode}")
 
         base_path_mode = os.path.join(self.hparams.base_data_path, self.hparams.data_setting, mode)
-        seeds_path_mode = sorted([f for f in os.listdir(base_path_mode) if f.startswith("seed")])
+        seeds_path_mode = sorted([f for f in os.listdir(base_path_mode) if os.path.isdir(os.path.join(base_path_mode, f))])
         assert len(seeds_path_mode) >= 1, f"No seeds found in {base_path_mode}"
         if not all_seeds:
             seeds_path_mode = seeds_path_mode[:1]
@@ -304,7 +308,19 @@ class BANIS(LightningModule):
 
 def main():
     args = parse_args()
-    args.resolution = (9, 9, 20) if args.data_setting != "liconn" else (9, 9, 12)
+    
+    # Load config and get resolution for the data_setting
+    conf = get_conf("./config.yaml")
+    resolution = None
+    for setting in conf.mito.settings:
+        if setting.name == args.data_setting:
+            resolution = tuple(setting.resolution)
+            break
+    
+    if resolution is None:
+        raise ValueError(f"Resolution not found for data_setting '{args.data_setting}' in config")
+    
+    args.resolution = resolution
 
     seed_everything(args.seed, workers=True)
 
@@ -359,7 +375,7 @@ def main():
         default_root_dir=save_dir,
         val_check_interval=args.val_check_interval,  # validation full cube inference expensive so less frequent
         check_val_every_n_epoch=None,
-        num_sanity_val_steps=args.n_debug_steps,
+        fast_dev_run=args.n_debug_steps,
         gradient_clip_val=1.0,
     )
     print(f"Checkpoints will be saved in: {trainer.default_root_dir}/checkpoints")
@@ -408,7 +424,7 @@ def parse_args():
     parser.add_argument("--val_check_interval", type=int, default=5000, help="Validation check interval.")
     parser.add_argument("--resume_from_last_checkpoint", action=argparse.BooleanOptionalAction, default=False, help="Resume training from the last checkpoint.")
     parser.add_argument("--model_from_checkpoint", type=str, default="", help="Load model from defined checkpoint.")
-    parser.add_argument("--validate_extern", action=argparse.BooleanOptionalAction, default=True, help="Long training with a separate validation process.")
+    parser.add_argument("--validate_extern", action=argparse.BooleanOptionalAction, default=False, help="Long training with a separate validation process.")
     parser.add_argument("--distributed", action=argparse.BooleanOptionalAction, default=False, help="Use distributed training.")
 
     # Data arguments

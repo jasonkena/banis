@@ -14,6 +14,8 @@ from torch.utils.data import Dataset, ConcatDataset
 from tqdm import tqdm
 from connectomics.data.utils.data_transform import skeleton_aware_distance_transform
 
+import warnings
+
 
 def comp_affinities(
         seg: np.ndarray, labeled_mask: np.ndarray = None, long_range: int = 10
@@ -178,7 +180,7 @@ class AffinityDataset(Dataset):
         aff, loss_mask = comp_affinities(seg, labeled_mask=labeled_mask, long_range=self.long_range)
         if self.sdt_args.sdt:
             sdt, _ = skeleton_aware_distance_transform(
-                seg,
+                (seg + (seg == -1)), # treat unlabeled as background
                 resolution=self.sdt_args.resolution,
             )
             assert sdt.shape == seg.shape
@@ -190,7 +192,8 @@ class AffinityDataset(Dataset):
         labeled_mask = labeled_mask[: self.size, : self.size, : self.size]
         if self.sdt_args.sdt:
             sdt = sdt[: self.size, : self.size, : self.size]
-        assert loss_mask.mean() > 0.1
+        if loss_mask.mean() < 0.1:
+            warnings.warn("Low loss mask mean, indicating many unlabeled voxels in the cube.")
 
         aff = aff.astype(np.int8)
         # Bits are stored as bytes anyway, save memory by also encoding loss mask
@@ -357,7 +360,7 @@ def get_seg_dataset(
 
     datasets = []
     for name in tqdm(names, desc="Loading datasets"):
-        sample = zarr.open(os.path.join(data_path, name), "r")
+        sample = zarr.open(os.path.join(data_path, name), mode="r")
         seg = sample["/volumes/labels/neuron_ids"][:]
         img = sample["/volumes/raw"][:][:, :, :, None]
 
@@ -415,7 +418,7 @@ def get_train_data(args: argparse.Namespace):
 def get_syn_train_data(args: argparse.Namespace):
     """Get synthetic training data."""
     base_path_train = os.path.join(args.base_data_path, args.data_setting, "train")
-    seeds_path_train = sorted([f for f in os.listdir(base_path_train) if "seed" in f])
+    seeds_path_train = sorted([f for f in os.listdir(base_path_train) if os.path.isdir(os.path.join(base_path_train, f))])
     assert seeds_path_train, f"No seeds found in {base_path_train}"
     seeds_train_paths = [os.path.join(base_path_train, seed) for seed in seeds_path_train]
 
@@ -424,7 +427,7 @@ def get_syn_train_data(args: argparse.Namespace):
         for seed_train_path in seeds_train_paths
     ])
     print(f"image+segmentation paths: {img_seg_paths}")
-    img_segs_train = [zarr.open(path, "r") for path in img_seg_paths]
+    img_segs_train = [zarr.open(path, mode="r") for path in img_seg_paths]
     segs_train = [img_seg["seg"] for img_seg in img_segs_train]
     print(f"Segmentation shapes: {[seg.shape for seg in segs_train]}")
 
@@ -451,12 +454,12 @@ def get_syn_train_data(args: argparse.Namespace):
 def get_val_data(args: argparse.Namespace):
     """Get validation data."""
     base_path_val = os.path.join(args.base_data_path, args.data_setting, "val")
-    seeds_path_val = sorted([f for f in os.listdir(base_path_val) if "seed" in f])
+    seeds_path_val = sorted([f for f in os.listdir(base_path_val) if os.path.isdir(os.path.join(base_path_val, f))])
     assert seeds_path_val, f"No seeds found in {base_path_val}"
     seeds_val_paths = [os.path.join(base_path_val, seed) for seed in seeds_path_val]
 
     img_seg_path = os.path.join(seeds_val_paths[0], "data.zarr")
-    img_seg = zarr.open(img_seg_path, "r")
+    img_seg = zarr.open(img_seg_path, mode="r")
 
     return AffinityDataset(
         seg=img_seg["seg"],
